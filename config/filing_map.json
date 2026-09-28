@@ -1,0 +1,12 @@
+{
+  "_comment": "Group -> destination folder WITHIN each structure (keyed by the master sub-folder name, e.g. 'Construction', 'M&ELite'). Group codes are OHS/ENV/QUAL/IMS (from departments.json form_folders). A form is filed into its mapped folder if that folder exists in the recreated structure; otherwise it falls back to '05 Forms (Populated)/<group>'. Add ENV/IMS homes or new structures here without touching code. Paths must match the folder names inside the master structure exactly.",
+  "Construction":          { "OHS": "04 - Health & Safety", "QUAL": "03 - Handover" },
+  "M&E":                   { "OHS": "04 - Health & Safety", "QUAL": "03 - Handover" },
+  "M&ELite":               { "OHS": "04 - Health & Safety", "QUAL": "03 - Handover" },
+  "Refrigeration":         { "OHS": "04 - Health & Safety", "QUAL": "03 - Handover" },
+  "Fire & Security Lite":  { "OHS": "04 - Health & Safety", "QUAL": "03 - Handover" },
+  "FoodLite":              { "OHS": "04 - Health & Safety", "QUAL": "03 - Handover" },
+  "Commercial":            { "QUAL": "02 - Handover" },
+  "CommercialLite":        { "QUAL": "02 - Handover" },
+  "Health & Safety":       { }
+}

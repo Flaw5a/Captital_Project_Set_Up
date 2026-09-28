@@ -5,6 +5,10 @@
   3. Copy each selected form in, stamp the project fields, and prefix the filename.
   4. Zip the result for download.
 
+Forms are filed into their mapped structure subfolder by group (config/filing_map.json);
+anything unmapped (or whose target folder is absent) falls back to
+"05 Forms (Populated)/<group>" so nothing is ever lost.
+
 All template files are treated as read-only; nothing under TEMPLATES_ROOT is
 modified. Stamping happens only on the copies in the output folder.
 """
@@ -16,7 +20,7 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..config import get_settings, load_departments, load_field_map
+from ..config import get_settings, load_departments, load_field_map, load_filing_map
 from .fields import FieldMatcher, ProjectData
 from .stamp_docx import stamp_docx
 from .stamp_pptx import stamp_pptx
@@ -72,6 +76,22 @@ def _prefixed_name(pj: str, site: str, original: str, dest_dir: Path) -> str:
     return original
 
 
+def _filing_target(dest: Path, filing_map: dict, master_sub: str | None,
+                   code: str | None, group: Path) -> Path:
+    """Destination directory for a form.
+
+    Uses filing_map[<structure>][<group code>] when that folder actually exists in
+    the recreated structure; otherwise falls back to '05 Forms (Populated)/<group>'.
+    """
+    if master_sub and code:
+        rel = (filing_map.get(master_sub) or {}).get(code)
+        if rel:
+            candidate = dest / rel
+            if candidate.is_dir():
+                return candidate
+    return dest / POPULATED_DIRNAME / group
+
+
 def _stamp_file(path: Path, matcher: FieldMatcher) -> int:
     ext = path.suffix.lower()
     if ext == ".docx":
@@ -118,6 +138,10 @@ def generate(data: ProjectData, selected_rels: list[str]) -> RunReport:
     # 3: forms
     matcher = FieldMatcher(load_field_map(), data.as_map(), settings.STAMP_DATE)
     froot = forms_root()
+    deps = load_departments()
+    master_sub = (deps["departments"].get(data.department) or {}).get(data.structure)
+    folder_to_code = {folder: code for code, folder in deps["form_folders"].items()}
+    filing_map = load_filing_map()
     report = RunReport(project_number=pj, site=data.site, output_dir=str(dest), zip_path="")
 
     for rel in selected_rels:
@@ -126,7 +150,9 @@ def generate(data: ProjectData, selected_rels: list[str]) -> RunReport:
         original = Path(rel).name
         if original.lower() in SKIP_FILES or original.startswith("~$"):
             continue
-        target_dir = dest / POPULATED_DIRNAME / group
+        target_dir = _filing_target(
+            dest, filing_map, master_sub, folder_to_code.get(group.name), group
+        )
         target_dir.mkdir(parents=True, exist_ok=True)
         out_name = _prefixed_name(pj, site, original, target_dir)
         out_path = target_dir / out_name

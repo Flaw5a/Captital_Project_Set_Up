@@ -9,7 +9,10 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">CBES <span>Project Set-Up</span></div>
+    <div class="brand">
+      <img class="logo" src="/static/cbes-logo.png" alt="City Building Engineering Services">
+      <span class="sub">Project Set-Up</span>
+    </div>
     {% if user %}
     <div class="userbox">
       <span class="who">{{ user.name }}{% if user.email %} &middot; {{ user.email }}{% endif %}</span>

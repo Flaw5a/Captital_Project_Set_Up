@@ -40,6 +40,7 @@ class Settings:
 
     AUTH_MODE: str = os.getenv("AUTH_MODE", "local").strip().lower()
     LOCAL_PASSWORD: str = os.getenv("LOCAL_PASSWORD", "cbes")
+    LOCAL_EMAIL: str = os.getenv("LOCAL_EMAIL", "")
 
     ENTRA_TENANT_ID: str = os.getenv("ENTRA_TENANT_ID", "")
     ENTRA_CLIENT_ID: str = os.getenv("ENTRA_CLIENT_ID", "")
@@ -76,3 +77,13 @@ def load_departments() -> dict:
 @lru_cache
 def load_field_map() -> dict:
     return json.loads((CONFIG_DIR / "field_map.json").read_text(encoding="utf-8"))
+
+
+@lru_cache
+def load_filing_map() -> dict:
+    """Group -> destination-folder map per structure. Missing file -> {} (all
+    forms then use the populated fallback)."""
+    p = CONFIG_DIR / "filing_map.json"
+    if not p.exists():
+        return {}
+    return json.loads(p.read_text(encoding="utf-8"))

@@ -57,7 +57,7 @@ async def login(request: Request):
     if s.AUTH_MODE == "entra":
         redirect_uri = s.ENTRA_REDIRECT_URI
         return await _get_oauth().entra.authorize_redirect(request, redirect_uri)
-    return templates.TemplateResponse(request, "login.html", {"request": request, "error": None})
+    return templates.TemplateResponse(request, "login.html", {"request": request, "error": None, "local_email": s.LOCAL_EMAIL})
 
 
 @router.post("/login", response_class=HTMLResponse)
@@ -66,12 +66,20 @@ async def login_local(request: Request, username: str = Form(...), password: str
     if s.AUTH_MODE == "entra":
         raise HTTPException(status_code=400, detail="Local login disabled (AUTH_MODE=entra).")
     if password != s.LOCAL_PASSWORD or not username.strip():
-        return templates.TemplateResponse(request, 
+        return templates.TemplateResponse(request,
             "login.html",
-            {"request": request, "error": "Invalid username or password."},
+            {"request": request, "error": "Invalid email or password.",
+             "local_email": s.LOCAL_EMAIL, "username": username},
             status_code=401,
         )
-    request.session["user"] = {"name": username.strip(), "email": ""}
+    uname = username.strip()
+    if "@" in uname:
+        email = uname
+        name = uname.split("@")[0].replace(".", " ").replace("_", " ").title()
+    else:
+        name = uname
+        email = s.LOCAL_EMAIL
+    request.session["user"] = {"name": name, "email": email}
     return RedirectResponse("/", status_code=303)
 
 

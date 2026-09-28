@@ -3,11 +3,11 @@
 {% block body %}
 <div class="card narrow">
   <h1>Sign in</h1>
-  <p class="muted">Local test login. Enter your name (recorded on the project) and the shared password.</p>
+  <p class="muted">Sign in with your email and password. Your email is recorded on each project you set up.</p>
   {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
   <form method="post" action="/login" class="stack">
-    <label>Your name
-      <input type="text" name="username" required autofocus placeholder="e.g. Andy Flaws">
+    <label>Email
+      <input type="email" name="username" required autofocus value="{{ username or local_email or '' }}" placeholder="you@city-holdings.co.uk">
     </label>
     <label>Password
       <input type="password" name="password" required>

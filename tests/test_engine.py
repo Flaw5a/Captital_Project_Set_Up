@@ -165,18 +165,21 @@ def test_generate_end_to_end(tmp_path, monkeypatch):
     assert dest.name == "PJ-654321 - Asda Stockton"
     # Department skeleton recreated.
     assert (dest / "04 - Health & Safety").is_dir()
-    # Forms populated + filename prefixed.
-    populated = list((dest / "05 Forms (Populated)").rglob("*.docx"))
-    assert populated
+    # Forms filed across the structure + filename prefixed.
+    all_docx = list(dest.rglob("*.docx"))
+    assert all_docx
     # Prefix is the project number ONLY (no site in the filename).
-    assert all(f.name.startswith("PJ-654321 - ") for f in populated)
-    assert all(" - Asda Stockton - " not in f.name for f in populated)
+    assert all(f.name.startswith("PJ-654321 - ") for f in all_docx)
+    assert all(" - Asda Stockton - " not in f.name for f in all_docx)
     assert report.total_fields > 0
     assert report.error_count == 0
     assert Path(report.zip_path).is_file()
 
-    # Verify a stamped value survived into the populated copy.
-    sample = next(f for f in populated if "Site Safety" in f.name)
+    # OHS forms are now filed into Health & Safety, not the populated fallback.
+    assert any("Site Safety" in f.name for f in (dest / "04 - Health & Safety").rglob("*.docx"))
+
+    # Verify a stamped value survived into the filed copy.
+    sample = next(f for f in all_docx if "Site Safety" in f.name)
     doc = Document(str(sample))
     vals = [c.text for tb in doc.tables for row in tb.rows for c in row.cells]
     assert "PJ-654321" in vals
@@ -210,3 +213,85 @@ def test_geo_links_and_graceful():
     ok = lookup_postcode("TS18 2PB")
     assert ok["google_maps_url"] and ok["google_earth_url"]
     assert ok["input"] == "TS18 2PB"
+
+
+# --------------------------------------------------------------------------- #
+def test_generate_files_by_group_into_subfolders(tmp_path, monkeypatch):
+    """v2: forms are filed into their mapped structure subfolder by group,
+    with a safe fallback to '05 Forms (Populated)/<group>' when unmapped."""
+    root = tmp_path / "root"
+    out = tmp_path / "out"
+    build_sample_root(root)
+
+    monkeypatch.setenv("TEMPLATES_ROOT", str(root))
+    monkeypatch.setenv("OUTPUT_ROOT", str(out))
+    monkeypatch.setenv("STAMP_DATE", "false")
+
+    import app.config as config
+    config.get_settings.cache_clear()
+    config.load_departments.cache_clear()
+    config.load_field_map.cache_clear()
+    config.load_filing_map.cache_clear()
+
+    from app.engine import generator, structure
+    tree = structure.forms_tree()
+    selected = [f["rel"] for grp in tree for f in grp["files"]]
+    assert selected
+
+    data = ProjectData(
+        project_number="PJ-777777",
+        site="Asda Leeds",
+        department="M&E",
+        structure="standard",
+    )
+    report = generator.generate(data, selected)
+    dest = Path(report.output_dir)
+
+    hs = dest / "04 - Health & Safety"
+    handover = dest / "03 - Handover"
+    populated = dest / "05 Forms (Populated)"
+
+    # OHS group -> Health & Safety (docx + the pptx Fire Plan)
+    assert any("Site Safety" in f.name for f in hs.rglob("*") if f.is_file())
+    assert any(f.suffix.lower() == ".pptx" for f in hs.rglob("*") if f.is_file())
+    # QUAL group -> Handover
+    assert any("Project Notification" in f.name for f in handover.rglob("*") if f.is_file())
+    # ENV + IMS have no mapped home -> fall back to the populated area
+    assert any("Waste Note" in f.name for f in populated.rglob("*") if f.is_file())
+    assert any("Weekly Inspection" in f.name for f in populated.rglob("*") if f.is_file())
+
+    # Nothing errored and every filed form keeps the PJ prefix
+    assert report.error_count == 0
+    forms = [f for f in dest.rglob("*")
+             if f.is_file() and f.suffix.lower() in (".docx", ".xlsx", ".pptx")]
+    assert forms and all(f.name.startswith("PJ-777777 - ") for f in forms)
+
+
+def test_filing_map_fallback_when_folder_absent(tmp_path, monkeypatch):
+    """If a mapped destination folder doesn't exist in the structure, the form
+    still lands safely in the populated fallback (never lost)."""
+    root = tmp_path / "root"
+    out = tmp_path / "out"
+    build_sample_root(root)
+    # Commercial has no '04 - Health & Safety' in the fixture, so OHS must fall back.
+    (root / "00 Master Projects FIle Template 0524 (Opt 2)" / "Commercial" / "01 - Order").mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setenv("TEMPLATES_ROOT", str(root))
+    monkeypatch.setenv("OUTPUT_ROOT", str(out))
+    import app.config as config
+    config.get_settings.cache_clear()
+    config.load_departments.cache_clear()
+    config.load_field_map.cache_clear()
+    config.load_filing_map.cache_clear()
+
+    from app.engine import generator, structure
+    tree = structure.forms_tree()
+    ohs = [f["rel"] for grp in tree if grp["code"] == "OHS" for f in grp["files"]]
+    assert ohs
+    data = ProjectData(project_number="PJ-888888", site="Test Site",
+                       department="Commercial", structure="standard")
+    report = generator.generate(data, ohs)
+    dest = Path(report.output_dir)
+    populated = dest / "05 Forms (Populated)"
+    assert any(populated.rglob("*.docx")), "OHS should fall back when no H&S folder exists"
+    assert report.error_count == 0
