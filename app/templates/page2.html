@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Step 2 &middot; Select forms{% endblock %}
+{% block body %}
+<div class="steps"><span class="step done">1 &middot; Project details</span><span class="step on">2 &middot; Select forms</span><span class="step">3 &middot; Generate</span></div>
+
+<div class="card">
+  <h1>Select forms</h1>
+  <p class="muted">
+    {{ data.project_number }} &middot; {{ data.site }}
+    {% if data.postcode %}&middot; {{ data.postcode }}{% endif %}
+    &middot; {{ data.department }} ({{ data.structure }})
+  </p>
+  {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+
+  <div class="toolbar">
+    <input type="search" id="filter" placeholder="Filter forms…">
+    <label class="radio"><input type="checkbox" id="selectAll"> Select all</label>
+    <span class="count"><span id="selCount">0</span> selected</span>
+  </div>
+
+  <form method="post" action="/generate" id="p2">
+    {% for grp in tree %}
+    <section class="group" data-code="{{ grp.code }}">
+      <div class="group-head">
+        <label class="radio grouptoggle"><input type="checkbox" class="grpAll"> {{ grp.code }} — {{ grp.folder }}</label>
+        <span class="gcount">{{ grp.files|length }} files</span>
+      </div>
+      <div class="files">
+        {% for f in grp.files %}
+        <label class="filerow">
+          <input type="checkbox" name="forms" value="{{ f.rel }}" class="fchk">
+          <span>{{ f.name }}</span>
+        </label>
+        {% else %}
+        <p class="muted empty">No files found in this folder.</p>
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+
+    <div class="actions sticky">
+      <a class="btn ghost" href="/">&larr; Back</a>
+      <button class="btn primary" type="submit">Generate project pack</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/app.js"></script>{% endblock %}

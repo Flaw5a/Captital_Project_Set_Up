@@ -1,0 +1,35 @@
+{
+  "_comment": "Maps a department + structure (standard/lite) to a folder inside the master template set. 'master_dir' is the top-level folder name under master_root; null means that structure is not offered for that department.",
+  "master_root": "00 Master Projects FIle Template 0524 (Opt 2)",
+  "forms_root": "05 Forms",
+  "departments": {
+    "Construction": { "standard": "Construction", "lite": null },
+    "M&E": { "standard": "M&E", "lite": "M&ELite" },
+    "Commercial": { "standard": "Commercial", "lite": "CommercialLite" },
+    "Refrigeration": { "standard": "Refrigeration", "lite": null },
+    "Health & Safety": { "standard": "Health & Safety", "lite": null },
+    "Fire & Security": { "standard": null, "lite": "Fire & Security Lite" },
+    "Food": { "standard": null, "lite": "FoodLite" }
+  },
+  "form_folders": {
+    "OHS": "01 OHS",
+    "ENV": "02 ENV",
+    "QUAL": "03 QUAL",
+    "IMS": "04 IMS"
+  },
+  "_lookups_comment": "Dropdown sources. 'file' is relative to TEMPLATES_ROOT. name_col supplies the option text (what gets stamped); id_col is optional metadata.",
+  "lookups": {
+    "project_managers": {
+      "file": "PMs.xlsx", "sheet": "Project Manager",
+      "name_col": "Full Name", "id_col": "Employment ID"
+    },
+    "quantity_surveyors": {
+      "file": "QS.xlsx", "sheet": "QS",
+      "name_col": "Full Name", "id_col": "Employment ID"
+    },
+    "customers": {
+      "file": "CBES Customer List.xlsx", "sheet": "Customer List",
+      "name_col": "Customer", "id_col": null
+    }
+  }
+}

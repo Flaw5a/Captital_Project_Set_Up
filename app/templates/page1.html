@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Step 1 &middot; Project details{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+      integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw=="
+      crossorigin="" referrerpolicy="no-referrer">
+{% endblock %}
+{% block body %}
+<div class="steps"><span class="step on">1 &middot; Project details</span><span class="step">2 &middot; Select forms</span><span class="step">3 &middot; Generate</span></div>
+
+<div class="card">
+  <h1>Project details</h1>
+  {% if errors %}<div class="alert error"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+
+  <form method="post" action="/step2" class="grid2" id="p1"
+        data-deps='{{ departments | tojson }}'>
+    <label class="col2">Department
+      <select name="department" id="department" required>
+        <option value="" disabled {% if not data.department %}selected{% endif %}>Select department…</option>
+        {% for d in departments %}
+        <option value="{{ d.name }}" {% if data.department==d.name %}selected{% endif %}>{{ d.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <fieldset class="col2 inline" id="structure-set">
+      <legend>Folder structure</legend>
+      <label class="radio"><input type="radio" name="structure" value="standard"
+        {% if data.structure=='standard' %}checked{% endif %}> Standard</label>
+      <label class="radio"><input type="radio" name="structure" value="lite"
+        {% if data.structure=='lite' %}checked{% endif %}> Light</label>
+    </fieldset>
+
+    <label>Project number
+      <input type="text" name="project_number" required placeholder="PJ-000000"
+             pattern="[Pp][Jj]-\d{6}" title="Format: PJ- followed by six digits"
+             value="{{ data.project_number or '' }}">
+    </label>
+    <label>Site / store name
+      <input type="text" name="site" required placeholder="e.g. Asda Stockton"
+             value="{{ data.site or '' }}">
+    </label>
+
+    <label>Postcode
+      <div class="pc-row">
+        <input type="text" id="postcode" name="postcode" placeholder="e.g. TS18 2PB"
+               value="{{ data.postcode or '' }}" autocomplete="off">
+        <button type="button" class="btn ghost sm" id="pcLookup">Look up</button>
+      </div>
+      <small id="pcStatus" class="muted"></small>
+    </label>
+    <label>Site address <span class="opt">(auto-filled from postcode; editable)</span>
+      <input type="text" id="site_address" name="site_address"
+             placeholder="Auto-filled from postcode, or type manually"
+             value="{{ data.site_address or '' }}">
+      <select id="addrPick" class="hidden"></select>
+    </label>
+
+    <div class="col2 map-wrap">
+      <div id="map" class="hidden"></div>
+      <div id="mapLinks" class="maplinks"></div>
+    </div>
+
+    <label>Project title <span class="opt">(defaults to site)</span>
+      <input type="text" name="project_title" value="{{ data.project_title or '' }}">
+    </label>
+    <label>Client / customer
+      <input type="text" name="client" list="customerlist" placeholder="Start typing…"
+             value="{{ data.client or '' }}" autocomplete="off">
+      <datalist id="customerlist">{% for c in customers %}<option value="{{ c }}">{% endfor %}</datalist>
+    </label>
+
+    <label>Project Manager <span class="opt">({{ pms|length }} on file)</span>
+      <input type="text" name="project_manager" list="pmlist" placeholder="Start typing a name…"
+             value="{{ data.project_manager or '' }}" autocomplete="off">
+      <datalist id="pmlist">{% for p in pms %}<option value="{{ p }}">{% endfor %}</datalist>
+    </label>
+    <label>Quantity Surveyor <span class="opt">({{ qss|length }} on file)</span>
+      <input type="text" name="quantity_surveyor" list="qslist" placeholder="Start typing a name…"
+             value="{{ data.quantity_surveyor or '' }}" autocomplete="off">
+      <datalist id="qslist">{% for q in qss %}<option value="{{ q }}">{% endfor %}</datalist>
+    </label>
+
+    <div class="col2 actions">
+      <button class="btn primary" type="submit">Next: select forms &rarr;</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
+        integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg=="
+        crossorigin="" referrerpolicy="no-referrer"></script>
+<script src="/static/app.js"></script>
+{% endblock %}

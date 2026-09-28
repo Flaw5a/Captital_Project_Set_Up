@@ -1,0 +1,212 @@
+"""Engine tests: label matching, per-format stampers, and end-to-end generate()."""
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import openpyxl
+import pytest
+from docx import Document
+from pptx import Presentation
+
+from app.engine.fields import FieldMatcher, ProjectData, normalise_label
+from app.engine.stamp_docx import stamp_docx
+from app.engine.stamp_pptx import stamp_pptx
+from app.engine.stamp_xlsx import stamp_xlsx
+from tests.fixtures import (
+    build_sample_root,
+    make_docx_form,
+    make_pptx_form,
+    make_xlsx_form,
+)
+
+FIELD_MAP = {
+    "fields": [
+        {"field": "project_number", "enabled": True, "labels": ["project number"]},
+        {"field": "project_title", "enabled": True, "labels": ["project title", "project name", "project"]},
+        {"field": "site", "enabled": True, "labels": ["site", "site location"]},
+        {"field": "postcode", "enabled": True, "labels": ["postcode"]},
+        {"field": "project_manager", "enabled": True, "labels": ["project manager"]},
+        {"field": "quantity_surveyor", "enabled": True, "labels": ["quantity surveyor"]},
+        {"field": "date", "enabled": False, "labels": ["date"]},
+    ]
+}
+
+VALUES = {
+    "project_number": "PJ-123456",
+    "project_title": "Asda Stockton Refresh",
+    "site": "Asda Stockton",
+    "postcode": "TS18 2PB",
+    "project_manager": "Andy Flaws",
+    "quantity_surveyor": "Alex Lee",
+    "client": "Asda",
+    "date": "28/09/2026",
+}
+
+
+def matcher():
+    return FieldMatcher(FIELD_MAP, VALUES, stamp_date=False)
+
+
+# --------------------------------------------------------------------------- #
+def test_normalise_label():
+    assert normalise_label("  Project  Number: ") == "project number"
+    assert normalise_label("PROJECT NO:") == "project no"
+    assert normalise_label(" Site ") == "site"
+
+
+def test_matcher_exact_only():
+    m = matcher()
+    assert m.value_for("Project Number:") == "PJ-123456"
+    assert m.value_for("project number") == "PJ-123456"
+    assert m.value_for("A random cell") is None
+    # Empty project value -> no write (client not in field map here).
+    assert m.value_for("Something") is None
+
+
+def test_pj_validation():
+    assert ProjectData("PJ-123456", "Site").validate() == []
+    assert ProjectData("PJ-12", "Site").validate()          # too few digits
+    assert ProjectData("123456", "Site").validate()         # missing prefix
+    assert ProjectData("PJ-123456", "").validate()          # missing site
+
+
+def test_project_title_defaults_to_site():
+    d = ProjectData("PJ-000001", "Asda Bootle")
+    assert d.project_title == "Asda Bootle"
+
+
+# --------------------------------------------------------------------------- #
+def test_stamp_docx_overwrites_and_fills(tmp_path):
+    p = tmp_path / "form.docx"
+    make_docx_form(p)
+    n = stamp_docx(str(p), matcher())
+    assert n >= 5
+    doc = Document(str(p))
+    t = doc.tables[0]
+    assert t.cell(0, 1).text == "Asda Stockton Refresh"   # stale "OLD STALE SITE" replaced
+    assert t.cell(0, 3).text == "PJ-123456"
+    assert t.cell(1, 1).text == "Asda Stockton"           # Site Location
+    assert t.cell(1, 3).text == "TS18 2PB"
+    assert t.cell(2, 1).text == "Andy Flaws"
+    assert t.cell(2, 3).text == "Alex Lee"
+
+
+def test_stamp_xlsx(tmp_path):
+    p = tmp_path / "form.xlsx"
+    make_xlsx_form(p)
+    n = stamp_xlsx(str(p), matcher())
+    assert n >= 2
+    wb = openpyxl.load_workbook(str(p))
+    ws = wb.active
+    assert ws["B1"].value == "PJ-123456"
+    assert ws["B2"].value == "Asda Stockton"
+    assert ws["B3"].value == "Andy Flaws"
+
+
+def test_stamp_pptx_inline(tmp_path):
+    p = tmp_path / "form.pptx"
+    make_pptx_form(p)
+    stamp_pptx(str(p), matcher())
+    prs = Presentation(str(p))
+    texts = [
+        sh.text_frame.text
+        for sl in prs.slides for sh in sl.shapes if sh.has_text_frame
+    ]
+    assert any("Asda Stockton Refresh" in t for t in texts)
+
+
+def test_date_disabled_by_default(tmp_path):
+    """A 'Date:' label must NOT be filled when stamp_date is False."""
+    from tests.fixtures import make_docx_simple
+    p = tmp_path / "d.docx"
+    doc = Document()
+    t = doc.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "Date:"
+    t.cell(0, 1).text = ""
+    doc.save(str(p))
+    stamp_docx(str(p), matcher())
+    assert Document(str(p)).tables[0].cell(0, 1).text == ""
+
+
+# --------------------------------------------------------------------------- #
+def test_generate_end_to_end(tmp_path, monkeypatch):
+    root = tmp_path / "root"
+    out = tmp_path / "out"
+    build_sample_root(root)
+
+    monkeypatch.setenv("TEMPLATES_ROOT", str(root))
+    monkeypatch.setenv("OUTPUT_ROOT", str(out))
+    monkeypatch.setenv("STAMP_DATE", "false")
+
+    import app.config as config
+    config.get_settings.cache_clear()
+    config.load_departments.cache_clear()
+    config.load_field_map.cache_clear()
+
+    from app.engine import generator, structure
+    tree = structure.forms_tree()
+    selected = [f["rel"] for grp in tree for f in grp["files"]]
+    assert selected, "sample forms should be discovered"
+
+    data = ProjectData(
+        project_number="PJ-654321",
+        site="Asda Stockton",
+        postcode="TS18 2PB",
+        project_manager="Andy Flaws",
+        quantity_surveyor="Alex Lee",
+        department="M&E",
+        structure="standard",
+    )
+    report = generator.generate(data, selected)
+
+    dest = Path(report.output_dir)
+    assert dest.is_dir()
+    assert dest.name == "PJ-654321 - Asda Stockton"
+    # Department skeleton recreated.
+    assert (dest / "04 - Health & Safety").is_dir()
+    # Forms populated + filename prefixed.
+    populated = list((dest / "05 Forms (Populated)").rglob("*.docx"))
+    assert populated
+    # Prefix is the project number ONLY (no site in the filename).
+    assert all(f.name.startswith("PJ-654321 - ") for f in populated)
+    assert all(" - Asda Stockton - " not in f.name for f in populated)
+    assert report.total_fields > 0
+    assert report.error_count == 0
+    assert Path(report.zip_path).is_file()
+
+    # Verify a stamped value survived into the populated copy.
+    sample = next(f for f in populated if "Site Safety" in f.name)
+    doc = Document(str(sample))
+    vals = [c.text for tb in doc.tables for row in tb.rows for c in row.cells]
+    assert "PJ-654321" in vals
+
+
+def test_lookups(tmp_path, monkeypatch):
+    root = tmp_path / "root"
+    from tests.fixtures import make_lookup_workbooks
+    make_lookup_workbooks(root)
+    monkeypatch.setenv("TEMPLATES_ROOT", str(root))
+    import app.config as config
+    config.get_settings.cache_clear()
+    config.load_departments.cache_clear()
+    from app.engine import lookups
+    lookups.clear_cache()
+    pms = lookups.project_managers()
+    assert "Andy Flaws" in pms and "Brian Rooney" in pms
+    assert "Alex Lee" in lookups.quantity_surveyors()
+    assert "Marks & Spencer" in lookups.customers()
+
+
+def test_geo_links_and_graceful():
+    from app.engine.geo import lookup_postcode
+    # Invalid format -> not valid, but Google links are still built.
+    bad = lookup_postcode("NOTAPOSTCODE")
+    assert bad["valid"] is False
+    assert "postcode" in bad["error"].lower()
+    assert bad["google_earth_url"].startswith("https://earth.google.com/")
+    # Well-formed postcode -> always returns clickable links (lookup may or may
+    # not resolve depending on network egress; both paths are acceptable).
+    ok = lookup_postcode("TS18 2PB")
+    assert ok["google_maps_url"] and ok["google_earth_url"]
+    assert ok["input"] == "TS18 2PB"

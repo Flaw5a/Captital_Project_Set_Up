@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}CBES Project Set-Up{% endblock %}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">CBES <span>Project Set-Up</span></div>
+    {% if user %}
+    <div class="userbox">
+      <span class="who">{{ user.name }}{% if user.email %} &middot; {{ user.email }}{% endif %}</span>
+      <a class="logout" href="/logout">Sign out</a>
+    </div>
+    {% endif %}
+  </header>
+  <main class="wrap">
+    {% block body %}{% endblock %}
+  </main>
+  <footer class="foot">City Building Engineering Services &middot; Internal tool &middot; v1.0</footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

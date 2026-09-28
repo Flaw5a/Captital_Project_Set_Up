@@ -1,0 +1,71 @@
+{
+  "_comment": "Label-driven field map. The engine normalises every table label / cell / inline 'Label:' text (lowercase, trimmed, trailing ':' removed, whitespace collapsed) and matches it EXACTLY against the strings in 'labels'. On a match, the project value is written into the adjacent value cell (docx/pptx table: next cell in the row; xlsx: cell to the right; inline text: after the colon). Exact matching avoids false positives (e.g. 'pm' inside another word). Add new labels here to extend coverage without touching code.",
+  "fields": [
+    {
+      "field": "project_number",
+      "enabled": true,
+      "labels": [
+        "project number", "project no", "project no.", "project ref",
+        "job no", "job number", "job no.", "contract no", "contract number",
+        "cbes project no", "cbes job no"
+      ]
+    },
+    {
+      "field": "project_title",
+      "enabled": true,
+      "labels": [
+        "project title", "project name", "project", "contract title",
+        "contract name", "scheme", "project / contract"
+      ]
+    },
+    {
+      "field": "site",
+      "enabled": true,
+      "labels": [
+        "site", "site name", "store", "store name", "premises", "location"
+      ]
+    },
+    {
+      "field": "site_address",
+      "enabled": true,
+      "labels": [
+        "site address", "site location", "address of site", "project address"
+      ]
+    },
+    {
+      "field": "postcode",
+      "enabled": true,
+      "labels": [
+        "postcode", "post code", "site postcode"
+      ]
+    },
+    {
+      "field": "project_manager",
+      "enabled": true,
+      "labels": [
+        "project manager", "pm name", "cbes project manager", "contract manager"
+      ]
+    },
+    {
+      "field": "quantity_surveyor",
+      "enabled": true,
+      "labels": [
+        "quantity surveyor", "qs", "qs name", "cbes qs", "commercial manager"
+      ]
+    },
+    {
+      "field": "client",
+      "enabled": true,
+      "labels": [
+        "client", "client name", "customer", "employer"
+      ]
+    },
+    {
+      "field": "date",
+      "enabled": false,
+      "labels": [
+        "date"
+      ]
+    }
+  ]
+}

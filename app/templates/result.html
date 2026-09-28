@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Done &middot; Project pack generated{% endblock %}
+{% block body %}
+<div class="steps"><span class="step done">1 &middot; Project details</span><span class="step done">2 &middot; Select forms</span><span class="step on">3 &middot; Generate</span></div>
+
+<div class="card">
+  <h1>Project pack generated</h1>
+  <div class="summary">
+    <div><span class="k">Project</span><span class="v">{{ report.project_number }} — {{ report.site }}</span></div>
+    <div><span class="k">Files</span><span class="v">{{ report.ok_count }} generated{% if report.error_count %}, {{ report.error_count }} error(s){% endif %}</span></div>
+    <div><span class="k">Fields stamped</span><span class="v">{{ report.total_fields }}</span></div>
+    <div><span class="k">Output folder</span><span class="v mono">{{ report.output_dir }}</span></div>
+  </div>
+
+  <div class="actions">
+    <a class="btn primary" href="/download">Download .zip</a>
+    <a class="btn ghost" href="/">New project</a>
+  </div>
+
+  <table class="results">
+    <thead><tr><th>Form</th><th>Output name</th><th class="num">Fields</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for f in report.files %}
+      <tr class="{{ f.status }}">
+        <td>{{ f.rel }}</td>
+        <td class="mono">{{ f.output_name }}</td>
+        <td class="num">{{ f.fields_written }}</td>
+        <td>{{ f.status }}{% if f.message %} <span class="muted">— {{ f.message }}</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
