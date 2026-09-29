@@ -248,14 +248,14 @@ def test_generate_files_by_group_into_subfolders(tmp_path, monkeypatch):
     dest = Path(report.output_dir)
 
     hs = dest / "04 - Health & Safety"
-    handover = dest / "03 - Handover"
+    phase = dest / "02 - Construction Phase"
     populated = dest / "05 Forms (Populated)"
 
     # OHS group -> Health & Safety (docx + the pptx Fire Plan)
     assert any("Site Safety" in f.name for f in hs.rglob("*") if f.is_file())
     assert any(f.suffix.lower() == ".pptx" for f in hs.rglob("*") if f.is_file())
-    # QUAL group -> Handover
-    assert any("Project Notification" in f.name for f in handover.rglob("*") if f.is_file())
+    # QUAL/MS 9.4 (Project Directory) -> Construction Phase zone (per the Library Map)
+    assert any("Project Notification" in f.name for f in phase.rglob("*") if f.is_file())
     # ENV + IMS have no mapped home -> fall back to the populated area
     assert any("Waste Note" in f.name for f in populated.rglob("*") if f.is_file())
     assert any("Weekly Inspection" in f.name for f in populated.rglob("*") if f.is_file())
@@ -294,4 +294,148 @@ def test_filing_map_fallback_when_folder_absent(tmp_path, monkeypatch):
     dest = Path(report.output_dir)
     populated = dest / "05 Forms (Populated)"
     assert any(populated.rglob("*.docx")), "OHS should fall back when no H&S folder exists"
+    assert report.error_count == 0
+
+
+# --------------------------------------------------------------------------- #
+# Library-map (per-form) filing for the Construction structure.
+# --------------------------------------------------------------------------- #
+def _build_construction_root(root: Path) -> None:
+    """A Construction TEMPLATES_ROOT with the exact subfolders the sample forms map to."""
+    from tests.fixtures import (
+        make_lookup_workbooks, make_docx_form, make_docx_simple,
+        make_xlsx_form, make_pptx_form,
+    )
+    make_lookup_workbooks(root)
+    master = root / "00 Master Projects FIle Template 0524 (Opt 2)" / "Construction"
+    for sub in (
+        "02 - Construction Phase/04 - Project Directory",
+        "04 - Health & Safety/04 - Construction Phase Plan",
+        "04 - Health & Safety/05 - Fire",
+        "04 - Health & Safety/13 - Inspections",
+        "04 - Health & Safety/19 - Waste",
+    ):
+        (master / sub).mkdir(parents=True, exist_ok=True)
+    forms = root / "05 Forms"
+    make_docx_form(forms / "01 OHS" / "HS 11.2 - Site Safety & Env Mgt Plan.docx")
+    make_xlsx_form(forms / "02 ENV" / "ENV 1.2 - Waste Note.xlsx")
+    make_docx_simple(forms / "03 QUAL" / "MS 9.4 Project Notification.docx")
+    make_pptx_form(forms / "01 OHS" / "HS 13.1 - Site Fire Plan.pptx")
+    make_docx_form(forms / "04 IMS" / "IMS 4.3 - PM Weekly Inspection.docx")
+
+
+def _clear_config_caches():
+    import app.config as config
+    for fn in (config.get_settings, config.load_departments, config.load_field_map,
+               config.load_filing_map, config.load_library_map):
+        fn.cache_clear()
+
+
+def test_library_map_files_construction_to_exact_subfolders(tmp_path, monkeypatch):
+    """Each Construction form lands in its exact Library-Map subfolder, and the whole
+    pack is bundled into a single downloadable zip with every filename PJ-prefixed."""
+    import zipfile
+    root = tmp_path / "root"
+    out = tmp_path / "out"
+    _build_construction_root(root)
+
+    monkeypatch.setenv("TEMPLATES_ROOT", str(root))
+    monkeypatch.setenv("OUTPUT_ROOT", str(out))
+    monkeypatch.setenv("STAMP_DATE", "false")
+    _clear_config_caches()
+
+    from app.engine import generator, structure
+    tree = structure.forms_tree()
+    selected = [f["rel"] for grp in tree for f in grp["files"]]
+    assert selected
+
+    data = ProjectData(project_number="PJ-654321", site="Asda Stockton",
+                       department="Construction", structure="standard")
+    report = generator.generate(data, selected)
+    dest = Path(report.output_dir)
+
+    def filed(name_sub, relfolder):
+        folder = dest / relfolder
+        return folder.is_dir() and any(
+            name_sub in f.name for f in folder.rglob("*") if f.is_file()
+        )
+
+    assert filed("Site Safety", "04 - Health & Safety/04 - Construction Phase Plan")   # HS 11.2
+    assert filed("Waste Note", "04 - Health & Safety/19 - Waste")                       # ENV 1.2
+    assert filed("Project Notification", "02 - Construction Phase/04 - Project Directory")  # MS 9.4
+    assert filed("Site Fire Plan", "04 - Health & Safety/05 - Fire")                    # HS 13.1 (pptx)
+    assert filed("Weekly Inspection", "04 - Health & Safety/13 - Inspections")          # IMS 4.3 (prefix)
+
+    # Everything resolved -> nothing dumped into the populated fallback.
+    populated = dest / "05 Forms (Populated)"
+    assert not (populated.exists() and any(populated.rglob("*")))
+
+    # Single zip, contains the filed forms in their subfolders, no errors, all prefixed.
+    assert report.error_count == 0
+    assert Path(report.zip_path).is_file()
+    with zipfile.ZipFile(report.zip_path) as zf:
+        names = zf.namelist()
+    assert any("04 - Construction Phase Plan" in n and "Site Safety" in n for n in names)
+    forms = [f for f in dest.rglob("*")
+             if f.is_file() and f.suffix.lower() in (".docx", ".xlsx", ".pptx")]
+    assert forms and all(f.name.startswith("PJ-654321 - ") for f in forms)
+
+
+def test_library_map_fallback_when_subfolder_absent(tmp_path, monkeypatch):
+    """When a mapped subfolder (and the coarse group folder) is absent, the form still
+    lands safely in the populated fallback so nothing is ever lost."""
+    from tests.fixtures import make_lookup_workbooks, make_docx_form
+    root = tmp_path / "root"
+    out = tmp_path / "out"
+    make_lookup_workbooks(root)
+    # Construction master WITHOUT '04 - Health & Safety' (and its Fire subfolder).
+    master = root / "00 Master Projects FIle Template 0524 (Opt 2)" / "Construction"
+    (master / "01 - Pre Construction").mkdir(parents=True, exist_ok=True)
+    make_docx_form(root / "05 Forms" / "01 OHS" / "HS 3.1 - Fire Risk Assessment.docx")
+
+    monkeypatch.setenv("TEMPLATES_ROOT", str(root))
+    monkeypatch.setenv("OUTPUT_ROOT", str(out))
+    _clear_config_caches()
+
+    from app.engine import generator, structure
+    tree = structure.forms_tree()
+    selected = [f["rel"] for grp in tree for f in grp["files"]]
+    assert selected
+
+    data = ProjectData(project_number="PJ-999000", site="Test Site",
+                       department="Construction", structure="standard")
+    report = generator.generate(data, selected)
+    dest = Path(report.output_dir)
+    populated = dest / "05 Forms (Populated)"
+    assert any(populated.rglob("*.docx")), "form should fall back when its subfolder is absent"
+    assert report.error_count == 0
+
+
+def test_library_map_root_zone_health_and_safety_department(tmp_path, monkeypatch):
+    """The 'Health & Safety' department keeps its H&S folders at the top level (no
+    '04 - Health & Safety/' prefix); a form must file into that root subfolder."""
+    from tests.fixtures import make_lookup_workbooks, make_pptx_form
+    root = tmp_path / "root"
+    out = tmp_path / "out"
+    make_lookup_workbooks(root)
+    master = root / "00 Master Projects FIle Template 0524 (Opt 2)" / "Health & Safety"
+    (master / "05 - Fire").mkdir(parents=True, exist_ok=True)
+    make_pptx_form(root / "05 Forms" / "01 OHS" / "HS 13.1 - Site Fire Plan.pptx")  # HS 13 -> Fire
+
+    monkeypatch.setenv("TEMPLATES_ROOT", str(root))
+    monkeypatch.setenv("OUTPUT_ROOT", str(out))
+    _clear_config_caches()
+
+    from app.engine import generator, structure
+    tree = structure.forms_tree()
+    selected = [f["rel"] for grp in tree for f in grp["files"]]
+    data = ProjectData(project_number="PJ-777001", site="HS Only",
+                       department="Health & Safety", structure="standard")
+    report = generator.generate(data, selected)
+    dest = Path(report.output_dir)
+
+    assert (dest / "05 - Fire").is_dir()
+    assert any("Site Fire Plan" in f.name for f in (dest / "05 - Fire").rglob("*") if f.is_file())
+    # Root zone: NOT nested under a '04 - Health & Safety' parent.
+    assert not (dest / "04 - Health & Safety").exists()
     assert report.error_count == 0

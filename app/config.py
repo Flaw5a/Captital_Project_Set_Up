@@ -31,30 +31,37 @@ def _bool(name: str, default: bool = False) -> bool:
 
 
 class Settings:
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-insecure-key-change-me")
+    """Runtime settings. Read from the environment each time an instance is created,
+    so tests can `monkeypatch.setenv(...)` + `get_settings.cache_clear()` to reconfigure.
+    """
 
-    TEMPLATES_ROOT: Path = Path(
-        os.getenv("TEMPLATES_ROOT", str(BASE_DIR / "sample_root"))
-    ).expanduser()
-    OUTPUT_ROOT: Path = Path(os.getenv("OUTPUT_ROOT", str(BASE_DIR / "output"))).expanduser()
+    def __init__(self) -> None:
+        self.SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-insecure-key-change-me")
 
-    AUTH_MODE: str = os.getenv("AUTH_MODE", "local").strip().lower()
-    LOCAL_PASSWORD: str = os.getenv("LOCAL_PASSWORD", "cbes")
-    LOCAL_EMAIL: str = os.getenv("LOCAL_EMAIL", "")
+        self.TEMPLATES_ROOT: Path = Path(
+            os.getenv("TEMPLATES_ROOT", str(BASE_DIR / "sample_root"))
+        ).expanduser()
+        self.OUTPUT_ROOT: Path = Path(
+            os.getenv("OUTPUT_ROOT", str(BASE_DIR / "output"))
+        ).expanduser()
 
-    ENTRA_TENANT_ID: str = os.getenv("ENTRA_TENANT_ID", "")
-    ENTRA_CLIENT_ID: str = os.getenv("ENTRA_CLIENT_ID", "")
-    ENTRA_CLIENT_SECRET: str = os.getenv("ENTRA_CLIENT_SECRET", "")
-    ENTRA_REDIRECT_URI: str = os.getenv(
-        "ENTRA_REDIRECT_URI", "http://localhost:8000/auth/callback"
-    )
+        self.AUTH_MODE: str = os.getenv("AUTH_MODE", "local").strip().lower()
+        self.LOCAL_PASSWORD: str = os.getenv("LOCAL_PASSWORD", "cbes")
+        self.LOCAL_EMAIL: str = os.getenv("LOCAL_EMAIL", "")
 
-    STAMP_DATE: bool = _bool("STAMP_DATE", False)
-    OVERWRITE_EXISTING: bool = _bool("OVERWRITE_EXISTING", False)
+        self.ENTRA_TENANT_ID: str = os.getenv("ENTRA_TENANT_ID", "")
+        self.ENTRA_CLIENT_ID: str = os.getenv("ENTRA_CLIENT_ID", "")
+        self.ENTRA_CLIENT_SECRET: str = os.getenv("ENTRA_CLIENT_SECRET", "")
+        self.ENTRA_REDIRECT_URI: str = os.getenv(
+            "ENTRA_REDIRECT_URI", "http://localhost:8000/auth/callback"
+        )
 
-    # Optional address / map providers (all features work without them).
-    GETADDRESS_API_KEY: str = os.getenv("GETADDRESS_API_KEY", "")
-    GOOGLE_MAPS_API_KEY: str = os.getenv("GOOGLE_MAPS_API_KEY", "")
+        self.STAMP_DATE: bool = _bool("STAMP_DATE", False)
+        self.OVERWRITE_EXISTING: bool = _bool("OVERWRITE_EXISTING", False)
+
+        # Optional address / map providers (all features work without them).
+        self.GETADDRESS_API_KEY: str = os.getenv("GETADDRESS_API_KEY", "")
+        self.GOOGLE_MAPS_API_KEY: str = os.getenv("GOOGLE_MAPS_API_KEY", "")
 
     @property
     def entra_metadata_url(self) -> str:
@@ -84,6 +91,18 @@ def load_filing_map() -> dict:
     """Group -> destination-folder map per structure. Missing file -> {} (all
     forms then use the populated fallback)."""
     p = CONFIG_DIR / "filing_map.json"
+    if not p.exists():
+        return {}
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+@lru_cache
+def load_library_map() -> dict:
+    """Per-form filing map for the structure it covers (currently Construction),
+    generated from CBES_Library_Map.xlsx. Resolution order used by the engine:
+    by_file[exact filename] -> by_prefix[longest code prefix] -> coarse filing_map /
+    populated fallback. Missing file -> {} (engine then uses filing_map only)."""
+    p = CONFIG_DIR / "library_map.json"
     if not p.exists():
         return {}
     return json.loads(p.read_text(encoding="utf-8"))
